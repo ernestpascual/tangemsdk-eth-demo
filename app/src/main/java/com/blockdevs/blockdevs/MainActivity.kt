@@ -142,7 +142,7 @@ class MainActivity : AppCompatActivity() {
              * It can take an array of BytesArray -- multisigniture
              */
             cardManager.sign(
-                arrayOf(wallet_public_key!!),
+                createSampleHashes(),
                 cardId
             ) {
                 when (it) {
@@ -159,7 +159,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Creates sample hashes to demo signing to try
+    // Creates sample hashes/ transactions to sign
         private fun createSampleHashes(): Array<ByteArray> {
             val hash1 = ByteArray(32) { 1 }
             val hash2 = ByteArray(32) { 2 }

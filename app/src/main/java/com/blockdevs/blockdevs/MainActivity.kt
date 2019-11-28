@@ -29,7 +29,7 @@ class MainActivity : AppCompatActivity() {
 
     // Lazy initialization
     private lateinit var cardId: String
-    private lateinit var wallet_balance: String
+    //private lateinit var wallet_balance: String
 
     // Storing data that needs safe calls or null checks
     // Protection agains NullPointerException for those who knows java
@@ -134,28 +134,29 @@ class MainActivity : AppCompatActivity() {
 
                 // Used wallet public key to sign
                 btn_sign?.setOnClickListener { _ ->
+                    /**
+                     * In signing using cardManager:
+                     * It can take an array of BytesArray -- multisigniture
+                     */
+                    cardManager.sign(
+                        createSampleHashes(),
+                        cardId
+                    ) {
+                        when (it) {
+                            is TaskEvent.Completion -> {
+                                if (it.error != null) runOnUiThread {
+                                    status?.text = it.error!!::class.simpleName
+                                }
+                            }
+                            is TaskEvent.Event -> runOnUiThread {
+                                status?.text = cardId + " used to sign sample hashes."
+                            }
+                        }
+                    }
 
                 }
             }
-            /**
-             * In signing using cardManager:
-             * It can take an array of BytesArray -- multisigniture
-             */
-            cardManager.sign(
-                createSampleHashes(),
-                cardId
-            ) {
-                when (it) {
-                    is TaskEvent.Completion -> {
-                        if (it.error != null) runOnUiThread {
-                            status?.text = it.error!!::class.simpleName
-                        }
-                    }
-                    is TaskEvent.Event -> runOnUiThread {
-                        status?.text = cardId + " used to sign sample hashes."
-                    }
-                }
-            }
+
         }
     }
 

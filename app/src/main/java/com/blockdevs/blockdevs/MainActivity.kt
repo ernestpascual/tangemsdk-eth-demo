@@ -1,6 +1,7 @@
 package com.blockdevs.blockdevs
 
 import android.app.DownloadManager
+import android.os.AsyncTask
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import com.tangem.CardManager
@@ -13,11 +14,6 @@ import com.tangem.tasks.TaskEvent
 import kotlinx.android.synthetic.main.activity_main.*
 import org.stellar.sdk.KeyPair
 import org.stellar.sdk.Server
-//import sun.jvm.hotspot.utilities.IntArray
-//import sun.jvm.hotspot.utilities.IntArray
-
-
-
 
 class MainActivity : AppCompatActivity() {
 
@@ -29,7 +25,7 @@ class MainActivity : AppCompatActivity() {
 
     // Lazy initialization
     private lateinit var cardId: String
-    //private lateinit var wallet_balance: String
+
 
     // Storing data that needs safe calls or null checks
     // Protection agains NullPointerException for those who knows java
@@ -39,11 +35,6 @@ class MainActivity : AppCompatActivity() {
 
     // Descriptions
     private val cardIsCancelled = "User cancelled!"
-
-
-    // TODO: Set up server location
-    // TODO: Alternately, you can just do a GET request from the REST API Server
-    var server = Server("https://horizon.stellar.org")
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -90,9 +81,7 @@ class MainActivity : AppCompatActivity() {
                             }
 
                             is ScanEvent.OnVerifyEvent -> {
-                                // Handle card verification
-
-                                // Display data
+                                // Handle card verification and display data
                                 runOnUiThread {
                                     // display text
                                     status?.text = "Hi, " + cardId + "!"
@@ -114,30 +103,12 @@ class MainActivity : AppCompatActivity() {
 
                         }
                         // Handle completion
-
-                        // TODO: Connect to the Stellar Network and check balance
-                        /*
-                        val balances = server.accounts().account(wallet).getBalances()
-                        for (balance in balances) {
-                            if (balance.assetType.equals("native", ignoreCase = true)) {
-                                wallet_balance = balance.balance
-                                runOnUiThread {
-                                    // display text
-                                    txt_wallet2?.text = wallet_balance
-                                }
-                            }
-                        }
-                        */
-
+                        // Call on async task to connect to the stellar network
+                        Stellar(wallet, this).execute()
                     }
                 }
 
-                // Used wallet public key to sign
                 btn_sign?.setOnClickListener { _ ->
-                    /**
-                     * In signing using cardManager:
-                     * It can take an array of BytesArray -- multisigniture
-                     */
                     cardManager.sign(
                         createSampleHashes(),
                         cardId
@@ -160,11 +131,49 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Creates sample hashes/ transactions to sign
+
+    // Creates sample hashed transactions to sign
         private fun createSampleHashes(): Array<ByteArray> {
             val hash1 = ByteArray(32) { 1 }
             val hash2 = ByteArray(32) { 2 }
             return arrayOf(hash1, hash2)
         }
+
 }
 
+// Async task to talk to the stellar network
+class Stellar(val wallet_address: String?, private var activity: MainActivity?) : AsyncTask<Void, Void, String>() {
+    private lateinit var wallet_balance: String
+
+    // Point to the stellar main network you can also point it to the test network if you wish
+    var server = Server("https://horizon.stellar.org")
+
+
+    override fun doInBackground(vararg params: Void?): String? {
+        // Connect to the server and get all balances of the wallet address
+        val balances = server.accounts().account(wallet_address).getBalances()
+
+        // Enumerate balances of the addresses
+        for (balance in balances) {
+            // get the total XLM (native asset) balance
+            if (balance.assetType.equals("native", ignoreCase = true)) {
+                wallet_balance = balance.balance
+            }
+        }
+
+        return wallet_balance
+    }
+
+    override fun onPreExecute() {
+        super.onPreExecute()
+
+        // If you want to initalize anything
+
+    }
+
+    override fun onPostExecute(result: String?) {
+        super.onPostExecute(result)
+        // Run balance on thread
+        activity?.txt_wallet2?.text = result
+    }
+}

@@ -1,10 +1,10 @@
 package com.blockdevs.blockdevs
 
-import android.app.DownloadManager
-import android.os.AsyncTask
-import androidx.appcompat.app.AppCompatActivity
+
 import android.os.Bundle
+import androidx.appcompat.app.AppCompatActivity
 import com.tangem.CardManager
+import com.tangem.common.extensions.toHexString
 import com.tangem.tangem_sdk_new.DefaultCardManagerDelegate
 import com.tangem.tangem_sdk_new.NfcLifecycleObserver
 import com.tangem.tangem_sdk_new.nfc.NfcManager
@@ -12,8 +12,8 @@ import com.tangem.tasks.ScanEvent
 import com.tangem.tasks.TaskError
 import com.tangem.tasks.TaskEvent
 import kotlinx.android.synthetic.main.activity_main.*
-import org.stellar.sdk.KeyPair
-import org.stellar.sdk.Server
+import org.kethereum.keccakshortcut.keccak
+
 
 class MainActivity : AppCompatActivity() {
 
@@ -21,6 +21,7 @@ class MainActivity : AppCompatActivity() {
     private val nfcManager = NfcManager()
     private val cardManagerDelegate : DefaultCardManagerDelegate =  DefaultCardManagerDelegate(nfcManager.reader)
     private val cardManager = CardManager(nfcManager.reader, cardManagerDelegate)
+
 
 
     // Lazy initialization
@@ -33,8 +34,10 @@ class MainActivity : AppCompatActivity() {
     private var wallet_public_key : ByteArray? = null
 
 
+
     // Descriptions
     private val cardIsCancelled = "User cancelled!"
+
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -46,6 +49,7 @@ class MainActivity : AppCompatActivity() {
         nfcManager.setCurrentActivity(this)
         cardManagerDelegate.activity = this
         lifecycle.addObserver(NfcLifecycleObserver(nfcManager))
+
 
         // Trigger scan card method on button click
         read_card?.setOnClickListener { _ ->
@@ -61,22 +65,38 @@ class MainActivity : AppCompatActivity() {
                                  */
                                 cardId = (taskEvent.data as ScanEvent.OnReadEvent).card.cardId
 
-
+                                // 1. Convert the wallet public key to eth wallet address
                                 /**
-                                 * In getting stellar wallet address:
-                                 * 1.) Convert the wallet public key (in BytesArray) to KeyPair from the stellar SDK
-                                 * 2.) Use the getAccountId() method from the stellar SDK to obtain the wallet address
+                                 * Based from the Tangem Android app -- made a kotlin implementation using kethereum
+                                 * and tangem core sdk
                                  */
 
-                                // 1.) Convert the wallet public key to KeyPair
-                                var keypair: KeyPair =
-                                    KeyPair.fromPublicKey((taskEvent.data as ScanEvent.OnReadEvent).card.walletPublicKey!!)
-
-                                // 2.) Use getAccountId() to get the wallet address and store it if you like
-                                wallet = keypair.getAccountId()
-
-                                // Referencing the public key to use for signing
                                 wallet_public_key = (taskEvent.data as ScanEvent.OnReadEvent).card.walletPublicKey!!
+                                // declare length of public key byte array
+                                var lenPk : Int =  wallet_public_key !!.size
+                                if (lenPk < 2) {
+                                    throw IllegalArgumentException("Uncompress public key length is invalid");
+                                }
+
+                                // Trim key
+                                val cleanKey = ByteArray(lenPk - 1)
+
+                                for (i in 0 until cleanKey.size) {
+                                    cleanKey[i] =  wallet_public_key !!.get(i + 1)
+                                }
+
+                                //  Hash it
+                                val r: ByteArray = cleanKey.keccak()
+
+                                // Declare address as byte array
+                                val address = ByteArray(20)
+
+                                for (i in 0..19) {
+                                    address[i] = r[i + 12]
+                                }
+
+                                wallet = String.format("0x%s", address.toHexString());
+
 
                             }
 
@@ -84,9 +104,10 @@ class MainActivity : AppCompatActivity() {
                                 // Handle card verification and display data
                                 runOnUiThread {
                                     // display text
-                                    status?.text = "Hi, " + cardId + "!"
+                                    status?.text = "Hi, "
                                     txt_wallet?.text = wallet
                                     btn_sign.isEnabled = true
+                                    txt_wallet2?.text = "Loading balance.."
                                 }
                             }
                         }
@@ -103,34 +124,22 @@ class MainActivity : AppCompatActivity() {
 
                         }
                         // Handle completion
-                        // Call on async task to connect to the stellar network
-                        Stellar(wallet, this).execute()
+                        // Call on async task to connect to the ETH
+                        EthGetBalance(wallet, this).execute()
                     }
                 }
 
+
+                // CALL CONTRACT
                 btn_sign?.setOnClickListener { _ ->
-                    cardManager.sign(
-                        createSampleHashes(),
-                        cardId
-                    ) {
-                        when (it) {
-                            is TaskEvent.Completion -> {
-                                if (it.error != null) runOnUiThread {
-                                    status?.text = it.error!!::class.simpleName
-                                }
-                            }
-                            is TaskEvent.Event -> runOnUiThread {
-                                status?.text = cardId + " used to sign sample hashes."
-                            }
-                        }
-                    }
+                    EthReadContract(this).execute()
+
 
                 }
             }
 
         }
     }
-
 
     // Creates sample hashed transactions to sign
         private fun createSampleHashes(): Array<ByteArray> {
@@ -141,39 +150,7 @@ class MainActivity : AppCompatActivity() {
 
 }
 
-// Async task to talk to the stellar network
-class Stellar(val wallet_address: String?, private var activity: MainActivity?) : AsyncTask<Void, Void, String>() {
-    private lateinit var wallet_balance: String
-
-    // Point to the stellar main network you can also point it to the test network if you wish
-    var server = Server("https://horizon.stellar.org")
 
 
-    override fun doInBackground(vararg params: Void?): String? {
-        // Connect to the server and get all balances of the wallet address
-        val balances = server.accounts().account(wallet_address).getBalances()
 
-        // Enumerate balances of the addresses
-        for (balance in balances) {
-            // get the total XLM (native asset) balance
-            if (balance.assetType.equals("native", ignoreCase = true)) {
-                wallet_balance = balance.balance
-            }
-        }
 
-        return wallet_balance
-    }
-
-    override fun onPreExecute() {
-        super.onPreExecute()
-
-        // If you want to initalize anything
-
-    }
-
-    override fun onPostExecute(result: String?) {
-        super.onPostExecute(result)
-        // Run balance on thread
-        activity?.txt_wallet2?.text = result
-    }
-}
